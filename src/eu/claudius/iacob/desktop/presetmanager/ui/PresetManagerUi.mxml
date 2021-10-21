@@ -1,0 +1,1045 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009"
+         xmlns:s="library://ns.adobe.com/flex/spark"
+         xmlns:mx="library://ns.adobe.com/flex/mx"
+         preinitialize="_onPreinitialize (event)">
+
+    <fx:Metadata>
+        [Event(name="presetChanged", type="eu.claudius.iacob.desktop.presetmanager.lib.PresetEvent")]
+    </fx:Metadata>
+
+    <fx:Declarations>
+        <fx:XML id="notesCss">
+            <css>
+                <![CDATA[
+				
+					.notes {
+						fontSize: 11;
+						letterSpacing: 0.8;
+						lineHeight: 15;
+						color: %s;
+					}
+				
+					.notesWarning {
+						fontSize: 11;
+						letterSpacing: 0.8;
+						lineHeight: 15;
+						color: %s;
+					}
+				
+					.notesError {
+						fontSize: 11;
+						letterSpacing: 0.8;
+						lineHeight: 15;
+						color: %s;
+					}
+				
+					a {
+						textDecoration: underline;
+					}
+				]]>
+            </css>
+        </fx:XML>
+    </fx:Declarations>
+
+    <fx:Script>
+		<![CDATA[
+        import eu.claudius.iacob.maidens.Colors;
+        import eu.claudius.iacob.maidens.Sizes;
+
+        import mx.collections.ArrayCollection;
+        import mx.collections.ISort;
+        import mx.collections.ISortField;
+        import mx.core.FlexGlobals;
+        import mx.core.IVisualElement;
+        import mx.events.FlexEvent;
+        import mx.events.ListEvent;
+
+        import spark.collections.Sort;
+        import spark.collections.SortField;
+        import spark.events.TextOperationEvent;
+
+        import eu.claudius.iacob.desktop.presetmanager.lib.Configuration;
+        import eu.claudius.iacob.desktop.presetmanager.lib.Constants;
+        import eu.claudius.iacob.desktop.presetmanager.lib.OperationResult;
+        import eu.claudius.iacob.desktop.presetmanager.lib.Payload;
+        import eu.claudius.iacob.desktop.presetmanager.lib.PayloadAnalysisResult;
+        import eu.claudius.iacob.desktop.presetmanager.lib.PresetEvent;
+        import eu.claudius.iacob.desktop.presetmanager.lib.PresetManager;
+
+        import ro.ciacob.desktop.operation.Procrastinator;
+        import ro.ciacob.utils.ColorUtils;
+        import ro.ciacob.utils.Files;
+        import ro.ciacob.utils.Patterns;
+        import ro.ciacob.utils.Strings;
+        import ro.ciacob.utils.constants.CommonStrings;
+
+        import eu.claudius.iacob.maidens.skins.SaveButtonSkin;
+        import eu.claudius.iacob.maidens.skins.RenameButtonSkin;
+        import eu.claudius.iacob.maidens.skins.DeleteButtonSkin;
+        import eu.claudius.iacob.maidens.skins.ApplyButtonSkin;
+        import eu.claudius.iacob.maidens.skins.ForceButtonSkin;
+        import eu.claudius.iacob.maidens.skins.CancelButtonSkin;
+
+
+        // ---
+        // PUBLIC MEMBERS
+        // ---
+
+        /**
+         * Can be used to optimize CPU relative to providing the list of "built-in configurations"
+         * (i.e., only compile the list when `hasBuiltInCache()` returns `false`.
+         * @see PresetManager.hasBuiltInCache()
+         */
+        public static function hasBuiltInCache(homeDirName:String):Boolean {
+            return PresetManager.hasBuiltInCache(homeDirName);
+        }
+
+        /**
+         * List of "built-in configurations" to initialize the underlying library with. Setting
+         * this property has no effect after the library has been initialized.
+         * @see PresetManager.PresetManager()
+         */
+        public function set builtinConfigurations(value:Vector.<Configuration>):void {
+            if (!_presetManager) {
+                _builtinConfigurations = value;
+                _builtinConfigurationsChanged = true;
+                invalidateProperties();
+            }
+        }
+
+        /**
+         * The file extension the underlying library will use when saving presets (aka "Configurations")
+         * to disk. Setting this property has no effect after the library has been initialized.
+         * @see PresetManager.PresetManager()
+         */
+        public function set fileExtension(value:String):void {
+            if (!_presetManager) {
+                _fileExtension = value;
+                _fileExtensionChanged = true;
+                invalidateProperties();
+            }
+        }
+
+        /**
+         * The name of the directory the underlying library will store presets (aka "Configurations") into.
+         * Setting this property has no effect after the library has been initialized.
+         * @see PresetManager.PresetManager()
+         */
+        public function set homeDirName(value:String):void {
+            if (!_presetManager) {
+                _homeDirName = value;
+                _homeDirNameChanged = true;
+                invalidateProperties();
+            }
+        }
+
+        // ---
+        // PRIVATE MEMBERS
+        // ---
+
+        // UI Constants
+        private static function get DEFAULT_COLOR():uint {
+            return FlexGlobals.topLevelApplication.getStyle('color') as uint;
+        }
+
+        private static const WARNING_COLOR:uint = DEFAULT_COLOR;
+        private static const ERROR_COLOR:uint = DEFAULT_COLOR;
+
+        private static const SPACE:Number = 10;
+        private static const ACTION_BUTTON_SIZE:Number = 28;
+
+        private static const STATUS_IDLE:int = 0;
+        private static const STATUS_CUSTOM_PRESET:int = 1;
+        private static const STATUS_EXISTING_SYSTEM_PRESET:int = 2;
+        private static const STATUS_EXISTING_USER_PRESET:int = 3;
+        private static const STATUS_NAME_EXISTS_SYSTEM:int = 4;
+        private static const STATUS_NAME_EXISTS_USER:int = 5;
+        private static const STATUS_SAVING_PRESET:int = 6;
+        private static const STATUS_DELETE_CONFIRMATION:int = 7;
+
+        private static const NOTE_CUSTOM_PRESET:String = '<span class="notes">Custom settings. Click "Save" to store as preset.</span>';
+        private static const NOTE_SYSTEM_PRESET:String = '<span class="notes">System preset. Can only save a changed copy of it.</span>';
+        private static const NOTE_USER_PRESET:String = '<span class="notes">User preset. Can be renamed or deleted.</span>';
+        private static const NOTE_NAME_EXISTS_SYSTEM:String = '<span class="notesError">Name is used by a system preset, try a different name.</span>';
+        private static const NOTE_NAME_EXISTS_USER:String = '<span class="notesWarning">Preset exists, click "Force" to overwrite (not undoable).</span>';
+        private static const NOTE_SAVING_PRESET:String = '<span class="notes">Click "Apply" to confirm chosen name.</span>';
+        private static const NOTE_DELETE_CONFIRMATION:String = '<span class="notesWarning">Click "Apply" to confirm preset deletion (not undoable).';
+
+        private static const PROMPT_NO_PRESET:String = 'None';
+        private static const PROMPT_CUSTOM_PRESET:String = 'None (custom settings)';
+        private static const PROMPT_ENTER_NAME:String = 'Enter preset name';
+
+        // UI variables
+        [Bindable]
+        private var _listInputDataProvider:ArrayCollection;
+        [Bindable]
+        private var _notesText:String;
+        [Bindable]
+        private var _notesCSS:StyleSheet;
+
+        [Bindable]
+        private var _inputVisible:Boolean;
+        [Bindable]
+        private var _listVisible:Boolean;
+        [Bindable]
+        private var _saveButtonVisible:Boolean;
+        [Bindable]
+        private var _renameButtonVisible:Boolean;
+        [Bindable]
+        private var _deleteButtonVisible:Boolean;
+        [Bindable]
+        private var _applyButtonVisible:Boolean;
+        [Bindable]
+        private var _forceButtonVisible:Boolean;
+        [Bindable]
+        private var _cancelButtonVisible:Boolean;
+
+        // Business logic constants
+        private static const SEVERITY_NONE:int = 0;
+        private static const SEVERITY_WARN:int = -1;
+        private static const SEVERITY_ERROR:int = -2;
+        private static const EVALUATE_DELAY:uint = 200;
+        private static const INPUT_CHANGE_DELAY:uint = 500;
+
+        // Business logic variables
+        [Bindable]
+        private var _presetManager:PresetManager;
+        [Bindable]
+        private var _errorSeverity:int = SEVERITY_NONE;
+        [Bindable]
+        private var _analysisResult:PayloadAnalysisResult;
+        private var _operationStatus:int = STATUS_IDLE;
+        private var _builtinConfigurations:Vector.<Configuration>;
+        private var _builtinConfigurationsChanged:Boolean;
+        private var _fileExtension:String;
+        private var _fileExtensionChanged:Boolean;
+        private var _homeDirName:String;
+        private var _homeDirNameChanged:Boolean;
+        private var _configurations:Vector.<Configuration>;
+        private var _cachedConfiguration:Configuration;
+        private var _cachedUserSettings:Object;
+        private var _evaluationProcrastinator:Procrastinator;
+        private var _inputChangeProcrastinator:Procrastinator;
+        private var _selectedConfigurationUid:String;
+        private var _selectedConfiguration:Configuration;
+        private var _lastSelectedConfiguration:Configuration;
+        private var _renamingOperationOngoing:Boolean;
+
+        /**
+         * Evaluates given `userSettings` to determine whether they have been previously
+         * saved as a preset or not.
+         *
+         * Note: as this operation is potentially CPU intensive, this implementation
+         * employs a mechanism to protect against "rapid-fire" calls (only the last call
+         * will be honoured in a series of rapid successive calls).
+         *
+         * @param    userSettings
+         *            An Object where each key represent an individual setting, and each
+         *            Object value represent the value associated to that setting.
+         *
+         *            Example: given a "Color Mixer" sample application, where the user
+         *            is able to drag three sliders, for Red, Green and Blue respectivelly,
+         *            in order to produce a new color, the `userSettings` parameter sent
+         *            to `evaluate` could look like this:
+         *
+         *            {
+         * 				redValue: 128,
+         * 				greenValue: 64,
+         * 				blueValue : 0
+         * 			}
+         *
+         *
+         */
+        public function evaluate(userSettings:Object):void {
+            if (_presetManager && userSettings) {
+                _cachedUserSettings = userSettings;
+                _evaluationProcrastinator.procrastinate();
+            }
+        }
+
+        /**
+         * @see mx.core.UIComponent.commitProperties()
+         */
+        override protected function commitProperties():void {
+            super.commitProperties();
+
+            // Attempt to initialize the library once that all required
+            // initialization arguments have been set.
+            if (!_presetManager) {
+                if (_builtinConfigurationsChanged ||
+                        _fileExtensionChanged ||
+                        _homeDirNameChanged) {
+                    var manager:PresetManager = new PresetManager(
+                            _builtinConfigurations,
+                            _fileExtension,
+                            _homeDirName
+                    );
+                    if (manager && manager.initialized) {
+                        _presetManager = manager;
+                        _builtinConfigurationsChanged = false;
+                        _fileExtensionChanged = false;
+                        _homeDirNameChanged = false;
+                        _updatePresetsList();
+                    }
+                }
+            }
+        }
+
+        /**
+         * Queries the underlying library for the full list of available
+         * presets. Does not return a value, instead populates the bindable
+         * memeber `_listInputDataProvider`, which, in turn, populates the
+         * `presetList` DropDownList.
+         */
+        private function _updatePresetsList():void {
+            if (_presetManager) {
+                _configurations = _presetManager.listConfigurations();
+                if (_configurations) {
+                    if (_listInputDataProvider) {
+                        _listInputDataProvider.removeAll();
+                    } else {
+                        _listInputDataProvider = new ArrayCollection;
+                    }
+                    for (var i:int = 0; i < _configurations.length; i++) {
+                        var configuration:Configuration = _configurations[i];
+                        var listItem:Object = {
+                            label: (configuration.isReadOnly ? '▬' : '') + ' ' + configuration.name,
+                            uid: configuration.uid,
+                            hash: configuration.hash,
+                            isReadOnly: configuration.isReadOnly
+                        };
+                        _listInputDataProvider.addItem(listItem);
+                    }
+                    var sort:ISort = new Sort;
+                    var sortByType:ISortField = new SortField('isReadOnly', true);
+                    var sortByName:ISortField = new SortField('label');
+                    sort.fields = [sortByType, sortByName];
+                    _listInputDataProvider.sort = sort;
+                    _listInputDataProvider.refresh();
+                    _updateUi();
+                }
+            }
+        }
+
+        /**
+         * Shows or hides various parts of the UI based on the own and
+         * underlying library's state.
+         */
+        private function _updateUi():void {
+            switch (_operationStatus) {
+                case STATUS_IDLE:
+                    _switchToListInput();
+                    _showButtons();
+                    _notesText = CommonStrings.EMPTY;
+                    _errorSeverity = SEVERITY_NONE;
+                    break;
+                case STATUS_CUSTOM_PRESET:
+                    _switchToListInput();
+                    _showButtons(saveButton);
+                    _notesText = NOTE_CUSTOM_PRESET;
+                    _errorSeverity = SEVERITY_NONE;
+                    break;
+                case STATUS_EXISTING_SYSTEM_PRESET:
+                    _switchToListInput();
+                    _showButtons();
+                    _notesText = NOTE_SYSTEM_PRESET;
+                    _errorSeverity = SEVERITY_NONE;
+                    break;
+                case STATUS_EXISTING_USER_PRESET:
+                    _switchToListInput()
+                    _showButtons(renameButton, deleteButton);
+                    _notesText = NOTE_USER_PRESET;
+                    _errorSeverity = SEVERITY_NONE;
+                    break;
+                case STATUS_NAME_EXISTS_SYSTEM:
+                    _switchToTextInput();
+                    _showButtons(cancelButton);
+                    _notesText = NOTE_NAME_EXISTS_SYSTEM;
+                    _errorSeverity = SEVERITY_ERROR;
+                    break;
+                case STATUS_NAME_EXISTS_USER:
+                    _switchToTextInput();
+                    _showButtons(forceButton, cancelButton);
+                    _notesText = NOTE_NAME_EXISTS_USER;
+                    _errorSeverity = SEVERITY_WARN;
+                    break;
+                case STATUS_SAVING_PRESET:
+                    _switchToTextInput();
+                    _showButtons(applyButton, cancelButton);
+                    _notesText = NOTE_SAVING_PRESET;
+                    _errorSeverity = SEVERITY_NONE;
+                    break;
+                case STATUS_DELETE_CONFIRMATION:
+                    _switchToListInput();
+                    _showButtons(applyButton, cancelButton);
+                    _notesText = NOTE_DELETE_CONFIRMATION;
+                    _errorSeverity = SEVERITY_WARN;
+                    break;
+            }
+            _updateApplyButtonState();
+        }
+
+        /**
+         * Selects an item in the `presetList` DropDownList control purely for display purposes,
+         * without dispatching an `PresetEvent.PRESET_CHANGED` event.
+         */
+        private function _updatePresetListSelection():void {
+            if (!_selectedConfigurationUid) {
+                presetList.selectedItem = null;
+                return;
+            }
+            if (_listInputDataProvider && _listInputDataProvider.length > 0) {
+                for (var i:int = 0; i < _listInputDataProvider.length; i++) {
+                    var listItem:Object = _listInputDataProvider.getItemAt(i);
+                    if (listItem.uid == _selectedConfigurationUid) {
+                        presetList.selectedItem = listItem;
+                        break;
+                    }
+                }
+            }
+        }
+
+        /**
+         * Makes visible the two given buttons, while hiding all the others.
+         */
+        private function _showButtons(button1:Button = null, button2:Button = null):void {
+            for (var i:int = 0; i < mainUiArea.numElements; i++) {
+                var element:IVisualElement = mainUiArea.getElementAt(i);
+                if (element is Button) {
+                    var mustShow:Boolean = (element == button1 || element == button2);
+                    element.visible = mustShow;
+                    element.includeInLayout = mustShow;
+                }
+            }
+        }
+
+        /**
+         * Makes `applyButton` enabled or not, based on the current state and various other
+         * conditions.
+         */
+        private function _updateApplyButtonState():void {
+            var inputText:String = Strings.trim(presetInput.text);
+            var enabledState:Boolean;
+            var isNotEmpty:Boolean = (inputText.length > 0);
+            switch (_operationStatus) {
+                case STATUS_SAVING_PRESET:
+                    if (_renamingOperationOngoing) {
+                        enabledState = (isNotEmpty && (inputText != _selectedConfiguration.name));
+                    } else {
+                        enabledState = isNotEmpty;
+                    }
+                    break;
+                case STATUS_NAME_EXISTS_USER:
+                    enabledState = isNotEmpty;
+                    break;
+                case STATUS_DELETE_CONFIRMATION:
+                    enabledState = true;
+                    break;
+            }
+            applyButton.enabled = enabledState;
+            forceButton.enabled = enabledState;
+        }
+
+        /**
+         * Convenience way to retrieve the Configuration Object a given `uid` points to.
+         * Useful because the underlying PresetManager library only provides access to the
+         * Configuration that was last set as "current".
+         *
+         * @param    uid
+         *            A Configuration unique ID. `Null` is an accepted value.
+         *
+         * @return    The matching Configuration Object, or `null` if there is no match (or if the
+         *            given `uid` itself is `null`).
+         */
+        private function _uidToConfiguration(uid:String):Configuration {
+            if (_presetManager && uid) {
+                var current:Configuration = _presetManager.currentConfiguration;
+                if (current && current.uid == uid) {
+                    return current;
+                }
+                var matches:Vector.<Configuration> = _configurations.filter(
+                        function (configuration:Configuration, ...etc):Boolean {
+                            return (configuration.uid == uid);
+                        }
+                );
+                return (matches.length > 0) ? matches[0] : null;
+            }
+            return null;
+        }
+
+        /**
+         * Convenience way to retrieve the Configuration Object a given `configurationName` points to.
+         * Useful because the underlying PresetManager library only provides access to the
+         * Configuration that was last set as "current".
+         *
+         * @param    uid
+         *            A Configuration unique ID. `Null` is an accepted value.
+         *
+         * @return    The matching Configuration Object, or `null` if there is no match (or if the
+         *            given `uid` itself is `null`).
+         */
+        private function _nameToConfiguration(configurationName:String):Configuration {
+            if (_presetManager && configurationName && _configurations) {
+                for (var i:int = 0; i < _configurations.length; i++) {
+                    var testConfiguration:Configuration = _configurations[i];
+                    if (testConfiguration.name == configurationName) {
+                        return testConfiguration;
+                    }
+                }
+            }
+            return null;
+        }
+
+        /**
+         * Produces a valid name for the given `current` Configuration, the way that it does not
+         * overlap the name of any Configuration found in the "pool" of currently loaded
+         * Configurations. Returns an empty string on failure.
+         *
+         * @param    current
+         *            A Configuration to base the new name on.
+         */
+        private function _autoRename(current:Configuration):String {
+            if (current) {
+                var counter:int = 2;
+                var originalName:String = Strings.trim(current.name);
+                var newName:String = originalName;
+                while (_nameToConfiguration(newName)) {
+                    newName = Strings.sprintf(Files.AUTO_RENAME_SCHEME_WITHOUT_EXTENSION, originalName, counter);
+                    counter++;
+                }
+                return newName;
+            }
+            return CommonStrings.EMPTY;
+        }
+
+        /**
+         * Closes and hides the `presetList` DropDownList component, while showing the `presetInput`
+         * TextInput component.
+         */
+        private function _switchToTextInput():void {
+            if (presetList.dropdown) {
+                presetList.dropdown.visible = false;
+            }
+            _listVisible = false;
+            _inputVisible = true;
+            presetInput.focusManager.setFocus(presetInput);
+            presetInput.selectionEndIndex = 0;
+            presetInput.selectionEndIndex = presetInput.length;
+        }
+
+        /**
+         * Hides the `presetInput` TextInput component, while showing and focusing the `presetList`
+         * DropDownList component.
+         */
+        private function _switchToListInput():void {
+            _listVisible = true;
+            _inputVisible = false;
+            presetList.focusManager.setFocus(presetList);
+        }
+
+        /**
+         * Executed after this class has been initialized, but before any of its children
+         * were initialized.
+         */
+        private function _onPreinitialize(event:FlexEvent):void {
+            var cssText:String = Strings.sprintf(
+                    Strings.removeExtraWhitespace(notesCss.toString()),
+                    ColorUtils.toHexNotation(DEFAULT_COLOR, false, true),
+                    ColorUtils.toHexNotation(WARNING_COLOR, false, true),
+                    ColorUtils.toHexNotation(ERROR_COLOR, false, true)
+            );
+            _notesCSS = new StyleSheet;
+            _notesCSS.parseCSS(cssText);
+            _inputChangeProcrastinator = new Procrastinator(_onInputChangeWindow, INPUT_CHANGE_DELAY);
+            _evaluationProcrastinator = new Procrastinator(_onEvaluationWindow, EVALUATE_DELAY);
+        }
+
+        /**
+         * Executed when the user clicks on one of the links in a "note" text. We simply
+         * re-route the action to the corresponding button.
+         */
+        private function _onNotesLinkClicked(event:TextEvent):void {
+            var linkAction:String = event.text;
+            var matchingButton:Button = (this[linkAction] as Button);
+            if (matchingButton) {
+                matchingButton.dispatchEvent(new MouseEvent(MouseEvent.CLICK));
+            }
+        }
+
+        /**
+         * Executes when the Save button (or equivalent) is clicked. Prepopulates
+         * the `presetInput` TextInput with a valid named derived after the last selected preset name
+         */
+        private function _onSaveButtonClick(event:MouseEvent):void {
+            if (_presetManager) {
+                presetInput.text = _autoRename(_lastSelectedConfiguration);
+                _operationStatus = STATUS_SAVING_PRESET;
+                _updateUi();
+            }
+        }
+
+        /**
+         * Executes when the Rename button (or equivalent) is clicked. Prepopulates
+         * the `presetInput` TextInput with the current preset name, focuses and selects
+         * the text, and hands over control to the preset saving logic.
+         */
+        private function _onRenameButtonClick(event:MouseEvent):void {
+            if (_presetManager) {
+                if (_configurations && _selectedConfigurationUid) {
+                    if (_selectedConfiguration) {
+                        _renamingOperationOngoing = true;
+                        presetInput.text = _selectedConfiguration.name;
+                        _operationStatus = STATUS_SAVING_PRESET;
+                        _updateUi();
+                    }
+                }
+            }
+        }
+
+        /**
+         * Executes when the Delete button (or equivalent) is clicked. Simply
+         * changes the `_operationStatus`. The actual deletion takes place from
+         * the confirmation screen.
+         */
+        private function _onDeleteButtonClick(event:MouseEvent):void {
+            if (_presetManager) {
+                if (_operationStatus == STATUS_EXISTING_USER_PRESET) {
+                    if (_presetManager.currentConfiguration) {
+                        _operationStatus = STATUS_DELETE_CONFIRMATION;
+                        _updateUi();
+                    }
+                }
+            }
+        }
+
+        /**
+         * Executes when the `applyButton` button (or equivalent) is clicked. The
+         * exact action taken depends on the current `_operationStatus`.
+         */
+        private function _onApplyButtonClick(event:MouseEvent):void {
+            if (_presetManager) {
+                var presetInputText:String = Strings.trim(presetInput.text);
+                var presetName:String;
+                var result:OperationResult;
+                switch (_operationStatus) {
+
+                        // When saving or renaming a preset (or "Configuration", in PresetManager's parlance), we also
+                        // set it as "current" afterward, so that new operations can be carried on against it, immediately
+                    case STATUS_SAVING_PRESET:
+                    case STATUS_NAME_EXISTS_USER:
+                        if (presetInputText != CommonStrings.EMPTY) {
+                            presetName = presetInputText;
+                            if (!_renamingOperationOngoing) {
+                                if (_analysisResult && _analysisResult.availableActions.indexOf(PayloadAnalysisResult.ACTION_SAVE) != -1) {
+                                    result = _presetManager.storeCurrentPayload(presetName);
+                                    if (result.success) {
+                                        _analysisResult = null;
+                                    }
+                                }
+                            } else {
+                                result = _presetManager.renameCurrentConfiguration(presetName, true);
+                            }
+                            if (result.success) {
+                                _selectedConfigurationUid = result.configuration.uid;
+                                _selectedConfiguration = _uidToConfiguration(_selectedConfigurationUid);
+                                if (_selectedConfiguration) {
+                                    _lastSelectedConfiguration = _selectedConfiguration;
+                                }
+                                _updatePresetsList();
+                                result = _presetManager.setCurrentConfiguration(_selectedConfigurationUid, true);
+                                if (result.success) {
+                                    _operationStatus = STATUS_EXISTING_USER_PRESET;
+                                    _updatePresetListSelection();
+                                }
+                                _updateUi();
+                                _renamingOperationOngoing = false;
+                                presetInput.text = CommonStrings.EMPTY;
+                            }
+                        }
+                        break;
+
+                        // When deleting a preset, we also make it easy for the user to re-add it back. We do that by
+                        // immediately evaluating the current settings (which are, in fact, the settings of the preset
+                        // that was just deleted).
+                    case STATUS_DELETE_CONFIRMATION:
+                        result = _presetManager.deleteCurrentConfiguration();
+                        if (result.success) {
+                            _updatePresetsList();
+                            _updatePresetListSelection();
+                            var userSettings:Object = result.configuration.payload.getDataChildAt(0).getContentMap();
+                            evaluate(userSettings);
+                        }
+                        break;
+                }
+            }
+        }
+
+        /**
+         * Executes when the Force button (or equivalent) is clicked. This button is only
+         * visible in one status (`STATUS_NAME_EXISTS_USER`), so switching the logic based on
+         * the originating status isn't needed.
+         *
+         * The operation is essentially a "rename" operation: first, the target user preset
+         * (aka "Configuration") is identified based on the user provided name, and second, the
+         * current preset is renamed "into" (or "over") the target preset.
+         */
+        private function _onForceButtonClick(event:MouseEvent):void {
+            if (_presetManager) {
+                var targetConfigurationName:String = Strings.trim(presetInput.text);
+                if (targetConfigurationName) {
+                    var sourceConfiguration:Configuration;
+                    var targetConfiguration:Configuration = _nameToConfiguration(targetConfigurationName);
+                    if (targetConfiguration) {
+                        var result:OperationResult;
+
+                        // Case (A): we are overwritting an existing user preset (aka "Configuration") with some
+                        // novel settings (aka "Payload") that were never stored before: we delete the preset
+                        // and store the settings under the now vacant name.
+                        if (_analysisResult && _analysisResult.availableActions.indexOf(PayloadAnalysisResult.ACTION_SAVE) != -1) {
+                            var tmpName:String = Strings.generateUniqueId({}, Constants.CONFIG_NAME_MAX_CHARS);
+                            result = _presetManager.storeCurrentPayload(tmpName);
+                            if (result.success) {
+                                _analysisResult = null;
+                                sourceConfiguration = result.configuration;
+                                result = _presetManager.setCurrentConfiguration(targetConfiguration.uid, true);
+                                if (result.success) {
+                                    result = _presetManager.deleteCurrentConfiguration();
+                                    if (result.success) {
+                                        result = _presetManager.setCurrentConfiguration(sourceConfiguration.uid, true);
+                                        if (result.success) {
+                                            _presetManager.renameCurrentConfiguration(targetConfigurationName, true);
+                                            _lastSelectedConfiguration = _presetManager.currentConfiguration;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                                // Case (B): we are overwriting a (target) existing user preset with another (source) existing
+                        // user preset: we delete the target, and rename the source to the name target had before deletion.
+                        else if (_selectedConfiguration) {
+                            sourceConfiguration = _selectedConfiguration;
+                            result = _presetManager.setCurrentConfiguration(targetConfiguration.uid, true);
+                            if (result.success) {
+                                result = _presetManager.deleteCurrentConfiguration();
+                                if (result.success) {
+                                    result = _presetManager.setCurrentConfiguration(sourceConfiguration.uid, true);
+                                    if (result.success) {
+                                        result = _presetManager.renameCurrentConfiguration(targetConfigurationName, true);
+                                        _lastSelectedConfiguration = _presetManager.currentConfiguration;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                _selectedConfiguration = result.configuration;
+                _selectedConfigurationUid = _selectedConfiguration.uid;
+                _lastSelectedConfiguration = _selectedConfiguration;
+                _updatePresetsList();
+                result = _presetManager.setCurrentConfiguration(_selectedConfigurationUid, true);
+                if (result.success) {
+                    _operationStatus = STATUS_EXISTING_USER_PRESET;
+                    _updatePresetListSelection();
+                }
+                _updateUi();
+                _renamingOperationOngoing = false;
+                presetInput.text = CommonStrings.EMPTY;
+            }
+        }
+
+        /**
+         * Executes when the Cancel button (or equivalent) is clicked.  The
+         * exact action taken depends on the current `_operationStatus`.
+         */
+        private function _onCancelButtonClick(event:MouseEvent):void {
+            if (_presetManager) {
+
+                switch (_operationStatus) {
+                    case STATUS_SAVING_PRESET:
+                    case STATUS_NAME_EXISTS_USER:
+                    case STATUS_NAME_EXISTS_SYSTEM:
+                        presetInput.text = CommonStrings.EMPTY;
+                        _operationStatus = _renamingOperationOngoing ? STATUS_EXISTING_USER_PRESET : STATUS_CUSTOM_PRESET;
+                        _renamingOperationOngoing = false;
+                        _updateUi();
+                        break;
+                    case STATUS_DELETE_CONFIRMATION:
+                        _operationStatus = STATUS_EXISTING_USER_PRESET;
+                        _updateUi();
+                        break;
+                }
+            }
+        }
+
+        /**
+         * Executes when the currently selected preset was changed inside the
+         * `presetList` DropDownList.
+         */
+        private function _onPresetSelected(event:ListEvent):void {
+            if (_presetManager) {
+                var selectedItem:Object = (presetList.selectedItem as Object);
+                if (selectedItem) {
+                    var uid:String = selectedItem.uid;
+                    var result:OperationResult = _presetManager.setCurrentConfiguration(uid);
+                    if (result.success) {
+                        _cachedConfiguration = null;
+                        var presetConfiguration:Configuration = result.configuration;
+                        _operationStatus = presetConfiguration.isReadOnly ?
+                                STATUS_EXISTING_SYSTEM_PRESET : STATUS_EXISTING_USER_PRESET;
+                        _selectedConfigurationUid = uid;
+                        _selectedConfiguration = _uidToConfiguration(uid);
+                        if (_selectedConfiguration) {
+                            _lastSelectedConfiguration = _selectedConfiguration;
+                        }
+                        var presetSettings:Object = presetConfiguration.payload.getDataChildAt(0).getContentMap();
+                        dispatchEvent(new PresetEvent(PresetEvent.PRESET_CHANGED, presetSettings));
+                    } else {
+                        if (result.reason == OperationResult.REASON_UNSAVED_CHANGES) {
+                            _cachedConfiguration = result.configuration;
+                        }
+                    }
+                    _updateUi();
+                }
+            }
+        }
+
+        /**
+         * Executes as soon as a time "window" is identified for evaluating the
+         * (last) content sent in for evaluation via the public, `evaluate()` method.
+         * This mechanism is in place to to protect against "rapid-fire" calls of
+         * the function.
+         */
+        private function _onEvaluationWindow():void {
+            if (_presetManager && _cachedUserSettings && _configurations) {
+                _operationStatus = STATUS_CUSTOM_PRESET;
+                var testPayload:Payload = new Payload;
+                testPayload.addDataChild(new Payload(_cachedUserSettings));
+                _analysisResult = _presetManager.setCurrentPayload(testPayload);
+                _selectedConfigurationUid = _analysisResult.matchUid;
+                _selectedConfiguration = _uidToConfiguration(_selectedConfigurationUid);
+                if (_selectedConfiguration) {
+                    _lastSelectedConfiguration = _selectedConfiguration;
+                }
+                if (_analysisResult.status == PayloadAnalysisResult.STATUS_MATCH) {
+                    if (_selectedConfiguration) {
+                        _operationStatus = _selectedConfiguration.isReadOnly ?
+                                STATUS_EXISTING_SYSTEM_PRESET : STATUS_EXISTING_USER_PRESET;
+                    }
+                }
+                _updatePresetListSelection();
+                _updateUi();
+                _cachedUserSettings = null;
+            }
+        }
+
+        /**
+         * Executes as soon as a time "window" is identified for evaluating the input
+         * the user has entered in the `presetInput` TextInput control. This mechanism
+         * is in place to to protect against "rapid-fire" calls of the function.
+         */
+        private function _onInputChangeWindow():void {
+            var testOperationStatus:int = _operationStatus;
+            var configurationName:String = Strings.trim(presetInput.text);
+            if (configurationName) {
+                var existingConfiguration:Configuration = _nameToConfiguration(configurationName);
+                if (existingConfiguration && (existingConfiguration != _selectedConfiguration)) {
+                    testOperationStatus = existingConfiguration.isReadOnly ? STATUS_NAME_EXISTS_SYSTEM : STATUS_NAME_EXISTS_USER;
+                } else {
+                    testOperationStatus = STATUS_SAVING_PRESET;
+                }
+            } else {
+                testOperationStatus = STATUS_SAVING_PRESET;
+            }
+            if (_operationStatus != testOperationStatus) {
+                _operationStatus = testOperationStatus;
+                _updateUi();
+            }
+            _updateApplyButtonState();
+        }
+
+        /**
+         * Executes after each user update of the `presetInput` TextInput control.
+         *
+         * Note: as operations triggered here are potentially CPU intensive, this implementation
+         * employs a mechanism to protect against "rapid-fire" calls (only the last call
+         * will be honoured in a series of rapid successive calls).
+         *
+         * @param    event
+         *            The TextOperationEvent that triggered execution of this listener. Not
+         *            actually used.
+         */
+        private function _onPresetInputChange(event:Event):void {
+
+            // The button will be re-enabled (if appropriate) during the next "input change window",
+            // when the "_updateApplyButtonState()" method is called.
+            applyButton.enabled = false;
+            if (_presetManager) {
+                _inputChangeProcrastinator.procrastinate();
+            }
+        }
+        ]]>
+	</fx:Script>
+
+    <!-- Outer Container.
+         Used to hide the entire UI if the underlying library could not be initialized. -->
+    <s:Group width="100%"
+             visible="{_presetManager != null}"
+             includeInLayout="{_presetManager != null}">
+        <s:layout>
+            <s:VerticalLayout verticalAlign="middle"
+                              paddingBottom="{SPACE * 0.2}"
+                              gap="{SPACE * 0.5}"/>
+        </s:layout>
+
+        <!-- First row: header -->
+        <mx:Label id="header"
+                  text="Preset"
+                  fontWeight="bold"
+                  width="100%"/>
+
+        <!-- Second row: drop-down list and buttons -->
+        <s:Group width="100%" id="mainUiArea">
+            <s:layout>
+                <s:HorizontalLayout verticalAlign="middle"
+                                    paddingBottom="{SPACE * 0.2}"
+                                    gap="{SPACE * 0.5}"/>
+            </s:layout>
+
+            <!-- Presets list -->
+            <mx:ComboBox id="presetList"
+                         width="{width - (SPACE + ACTION_BUTTON_SIZE * 2)}"
+                         height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                         dataProvider="{_listInputDataProvider}"
+                         visible="{_listVisible}"
+                         includeInLayout="{_listVisible}"
+                         prompt="{(_analysisResult != null)? PROMPT_CUSTOM_PRESET : PROMPT_NO_PRESET}"
+                         change="_onPresetSelected (event)"/>
+
+            <!-- Input for naming and renaming presets -->
+            <mx:TextInput id="presetInput"
+                          width="{width - (SPACE + ACTION_BUTTON_SIZE * 2)}"
+                          height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                          visible="{_inputVisible}"
+                          includeInLayout="{_inputVisible}"
+                          maxChars="{Constants.CONFIG_NAME_MAX_CHARS}"
+                          restrict="{Patterns.SAFEST_FILENAME_ALL_PLATFORMS}"
+                          paddingTop="{Sizes.SECONDARY_UI_BUTTON_SIZE * 0.09}"
+                          paddingBottom="{Sizes.SECONDARY_UI_BUTTON_SIZE * 0.09}"
+                          toolTip="{PROMPT_ENTER_NAME}"
+                          change="_onPresetInputChange (event)"/>
+
+            <!-- Action buttons. At most two of them will be visible at any given time.  -->
+            <s:Button id="saveButton"
+                      width="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      toolTip="Save"
+                      visible="{_saveButtonVisible}"
+                      includeInLayout="{_saveButtonVisible}"
+                      useHandCursor="true"
+                      buttonMode="true"
+                      skinClass="{SaveButtonSkin}"
+                      click="_onSaveButtonClick(event)"/>
+
+            <s:Button id="renameButton"
+                      width="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      toolTip="Rename"
+                      visible="{_renameButtonVisible}"
+                      includeInLayout="{_renameButtonVisible}"
+                      useHandCursor="true"
+                      buttonMode="true"
+                      skinClass="{RenameButtonSkin}"
+                      click="_onRenameButtonClick(event)"/>
+
+            <s:Button id="deleteButton"
+                      width="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      toolTip="Delete"
+                      visible="{_deleteButtonVisible}"
+                      includeInLayout="{_deleteButtonVisible}"
+                      useHandCursor="true"
+                      buttonMode="true"
+                      skinClass="{DeleteButtonSkin}"
+                      click="_onDeleteButtonClick(event)"/>
+
+            <s:Button id="applyButton"
+                      width="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      toolTip="Apply"
+                      visible="{_applyButtonVisible}"
+                      includeInLayout="{_applyButtonVisible}"
+                      useHandCursor="true"
+                      buttonMode="true"
+                      skinClass="{ApplyButtonSkin}"
+                      click="_onApplyButtonClick(event)"/>
+
+            <s:Button id="forceButton"
+                      width="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      toolTip="Force"
+                      visible="{_forceButtonVisible}"
+                      includeInLayout="{_forceButtonVisible}"
+                      useHandCursor="true"
+                      buttonMode="true"
+                      skinClass="{ForceButtonSkin}"
+                      click="_onForceButtonClick(event)"/>
+
+            <s:Button id="cancelButton"
+                      width="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      height="{Sizes.SECONDARY_UI_BUTTON_SIZE}"
+                      toolTip="Cancel"
+                      visible="{_cancelButtonVisible}"
+                      includeInLayout="{_cancelButtonVisible}"
+                      useHandCursor="true"
+                      buttonMode="true"
+                      skinClass="{CancelButtonSkin}"
+                      click="_onCancelButtonClick(event)"/>
+
+        </s:Group>
+
+        <!-- Third row: notes -->
+        <s:Group width="100%">
+            <s:layout>
+                <s:HorizontalLayout verticalAlign="top"
+                                    paddingBottom="{SPACE * 0.2}"
+                                    gap="{SPACE * 0.25}"/>
+            </s:layout>
+
+            <!-- Information icon -->
+            <s:Graphic version="1.0"
+                       viewHeight="34.1997"
+                       viewWidth="34.1997"
+                       scaleX="0.4"
+                       scaleY="0.4"
+                       visible="{!!_notesText}"
+                       includeInLayout="{!!_notesText}">
+                <s:Group y="5">
+                    <s:Path winding="nonZero"
+                            data="M17.1001 0C7.65576 0 0 7.65576 0 17.1001 0 26.5444 7.65576 34.1997 17.1001 34.1997 26.5444 34.1997 34.1997 26.5444 34.1997 17.1001 34.1997 7.65576 26.5444 0 17.1001 0ZM17.1001 6.29346C18.7788 6.29346 20.1401 7.65479 20.1401 9.3335 20.1401
+							11.0127 18.7788 12.3735 17.1001 12.3735 15.4214 12.3735 14.0601 11.0127 14.0601 9.3335 14.0601 7.65479 15.4214 6.29346 17.1001 6.29346ZM21.6606 27.147C21.6606 27.5659 21.3198 27.7407 20.8999 27.7407L13.3003 27.7407C12.8804 27.7407 12.54 27.5659
+							12.54 27.147L12.54 26.7661C12.54 26.3462 12.8804 25.8403 13.3003 25.8403L14.0601 25.8403 14.0601 16.3403 13.3003 16.3403C12.8804 16.3403 12.54 16.166 12.54 15.7466L12.54 15.3667C12.54 14.9468 12.8804 14.4399 13.3003 14.4399L19.3794 14.4399C19.7993
+							14.4399 20.1401 14.9468 20.1401 15.3667L20.1401 15.7466 20.1401 25.8403 20.8999 25.8403C21.3198 25.8403 21.6606 26.3462 21.6606 26.7661L21.6606 27.147Z">
+                        <s:fill>
+                            <mx:SolidColor
+                                    color="{Colors.CHROME_TEXT_COLOR}"/>
+                        </s:fill>
+                    </s:Path>
+                </s:Group>
+            </s:Graphic>
+
+            <!-- Notes -->
+            <mx:Text id="notes"
+                     htmlText="{_notesText}"
+                     visible="{!!_notesText}"
+                     includeInLayout="{!!_notesText}"
+                     width="100%"
+                     textAlign="left"
+                     styleSheet="{_notesCSS}"
+                     link="_onNotesLinkClicked (event)"
+            />
+        </s:Group>
+    </s:Group>
+</s:Group>
