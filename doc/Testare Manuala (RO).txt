@@ -1,0 +1,93 @@
+1. Deschide aplicatia de test. Ar trebui sa vezi testul "Preset:" si lista de preset-uri, fara nimic selectat. Textul din lista ar trebui sa fie "None".
+
+2. Selecteaza, la intamplare, trei dintre preset-urile disponibile. Alege atat preset-uri de sistem (contin cuvantul "system") cat si preset-uri adaugate de utilizator (celelalte). De fiecare data, aplicatia gazda ar trebui sa se actualizeze corespunzator.
+
+3. Observa valorile a trei preset-uri la intamplare. Fara sa le selectezi din lista, foloseste interfata pentru a realiza intocmai combinatiile de valori ale preset-urilor respective. De fiecare data cand reproduci corect o combinatie, selectia din lista de preset-uri ar trebui sa se actualizeze, afisand preset-ul care se potriveste. De asemenea, o nota (sub lista de preset-uri) ar trebui sa iti spuna daca preset-ul care se potriveste cu combinatia ta curenta de setari este un preset "de sistem" sau adaugat de utilizator. Daca este un preset adaugat de utilizator, in dreapta listei de preset-uri ar trebui sa apara butoane pentru redenumirea sau stergerea preset-ului.
+
+4. Foloseste interfata aplicatiei de test pentru a obtine o combinatie de setari care nu exista deja ca un preset in lista de preset-uri. Textul din lista ar trebui sa fie "None (custom settings)". In dreapta listei ar trebui sa apara butonul "Save". Textul informativ de sub lista ar trebui sa contina informatii despre faptul ca utilizatorul poate salva combinatia curenta de setari.
+
+	4.1. Apasa butonul "Save". Interfata ar trebui sa se modifice astfel:
+		- lista de preset-uri ar trebui sa fie inlocuita cu un camp text; daca ai selectat cel putin un preset anterior, in campul text are trebui sa se afiseze o propunere pentru noul nume, bazata pe numele ultimului preset selectat, de ex. <<Nume Preset Selectat>>(2). Daca nu ai selectat niciodata un preset, campul de test ar trebui sa fie gol. Campul de text ar trebui sa fie selectat (daca are continut) sau doar activ (cu cursorul de insertie vizibil);
+
+		- butonul "Save" din dreapta ar trebui sa fie inlocuit de doua butoane, "Apply" si "Cancel";
+
+		- textul de sub campul de text ar trebui sa mentioneze ca utilizatorul va salva combinatia curenta de setari folosind numele introdus in campul de test.
+
+	4.2. Introdu un nume de preset care sigur nu mai exista in lista de preset-uri. Butonul "Apply" ar trebui sa devina indisponibil pe masura ce tastezi, si sa redevina disponibil cand ai terminat de tastat, daca numele ales este valid.
+
+	4.3. Apasa butonul "Apply". Interfata ar trebui sa se modifice astfel:
+	- campul text ar trebui sa fie inlocuit cu lista de preset-uri; in lista de preset-uri, intrarea aferenta noului nume introdus ar trebui sa fie selectata, iar numele ar trebui sa contina, la stanga sa, un simbol care denota ca preset-ul curent este un preset introdus de utilizator (nu unul de "sistem").
+
+	- butoanele "Apply" si "Cancel" ar trebui sa fie inlocuite de butoanele "Rename" si "Delete";
+
+	- textul de sub lista de preset-uri ar trebui sa contina o informatie legata de faptul ca preset-ul curent este un preset de utilizator.
+
+	4.4. Repeta procedura pentru a adauga inca trei preset-uri de utilizator. Foloseste de fiecare data nume unice.
+
+	4.5. Extinde lista de preset-uri. Noile preset-uri adaugate ar trebui sa fie listate dupa toate preset-urile de sistem, intr-un grup distinct, ordonat alfabetic.
+
+5. Selecteaza un preset de sistem. Interfata ar trebui sa se modifice astfel:
+	- toate butoanele ar trebui sa dispara;
+	- textul informativ de sub lista de preset-uri ar trebui sa contina informatia ca preset-urile de sistem nu pot fi modificate.
+
+6. Selecteaza un preset adaugat in pasii anteriori (un preset "de utilizator"). Interfata ar trebui sa fie cea descrisa la punctul 4.3.
+	6.1. Apasa butonul "Delete". Interfata ar trebui sa se modifice astfel:
+
+		- butoanele "Rename" si "Delete" ar trebui sa fie inlocuite de butoanele "Apply" si "Cancel";
+
+		- textul de sub lista de preset-uri ar trebui sa aiba o culoare de atentionare, si sa informeze utilizatorul ca stergerea unui preset nu poate fi anulata.
+
+	6.2. Apasa butonul "Apply". Preset-ul selectat ar trebui sa dispara din lista. Interfata ar trebui sa se modifice astfel:
+		- textul din lista ar trebui sa devina "None (custom settings)";
+
+		- Butoanele "Apply" si "Cancel" ar trebui sa fie inlocuite cu butonul "Save".
+
+	6.3. Extinde lista de preset-uri. Preset-ul sters nu ar trebui sa mai fie in lista.
+
+7. Selecteaza un preset "de utilizator" din lista. Apasa "Cancel" pentru a NU salva setarile curente, si a incarca in schimb preset-ul selectat. Dupa apasarea butonului "Cancel", interfata ar trebui sa fie cea descrisa la punctul 4.3.
+
+	7.1. Apasa butonul "Rename". Interfata ar trebui sa se modifice, si sa fie cea descrisa la punctul 4.1, cu urmatoarele amendamente:
+		- Textul din campul de text ar trebui sa fie numele curent al preset-ului;
+
+		- Butonul "Apply" ar trebui sa fie inactiv.
+
+	7.2. Introdu alt nume de preset in campul de text. Butonul Apply ar trebui sa fie inactiv daca campul de text este gol/contine doar spatii, sau daca numele introdus este numele curent al preset-ului.
+
+	7.3. Apasa butonul "Apply". Preset-ul ar trebui sa fie redenumit; interfata ar trebui sa se modifice, si sa fie cea descrisa la punctul 4.3.
+
+	7.4.  Reia pasii 7.1 si 7.2, dar de data aceasta apasa butonul "Cancel". Preset-ul ar trebui sa revina la numele de dinaintea modificarii, iar interfata ar trebui sa revina la starea descrisa la punctul 4.3.
+
+8. Extinde lista de preset-uri. Fie retine, fie noteaza numele a doua preset-uri existente, unul "de sistem", altul de "utilizator". Inchide lista de preset-uri fara a selecta nimic. Reia pasii 4 si 4.1, insa introdu, pentru salvare, numele unui preset existent.
+
+	8.1. Introdu numele unui "preset de sistem" existent. Interfata ar trebui sa se modifice astfel:
+		- Singurul buton disponibil ar trebui sa fie "Cancel";
+
+		- Textul de sub campul text are trebui sa fie afisat intr-o culoare de eroare, si sa specifice ca numele nu poate fi utilizat;
+
+	8.2. Apasa butonul "Cancel" .Interfata ar trebui sa revina la aspectul descris la punctul 4. Reia punctul 8.1. De data aceasta, in loc sa apesi butonul "Cancel", modifica textul, astfel incat sa nu se suprapuna peste numele unui preset de sistem existent (note: spatiile la inceputul sau la finalul unui nume de preset sunt ignorate). Interfata ar trebui sa se modifice, si sa fie cea de la punctul 4.1.
+
+	8.3. Modifica textul, astfel incat sa se suprapuna peste numele unui preset "de utilizator" existent. Interfata ar trebui sa se modifice si sa fie cea de la punctul 4.1, cu urmatoarele amendamente:
+
+		- Butonul de "Apply" ar trebui sa fie inlocuite de butonul "Force";
+
+		- Textul de sub campul de text ar trebui sa fie afisat intr-o culoare de atentionare, si sa specifice ca operatia presupune inlocuirea unui preset de utilizator existent.
+
+	8.4. Apasa butonul "Force". Preset-ul de utilizator existent va fi inlocuit de noua combinatie de setari. Interfata ar trebui sa se modifice si sa fie cea de la punctul 4.3.
+
+	8.5. Extinde lista de preset-uri. Confirma ca niciun alt preset nu a fost adaugat. Confirma (prin schimbarea preset-ului) faptul ca preset-ul suprascris contine intr-adevar combinatia de setari salvata.
+
+9. Reia pasul patru. Dupa ce ai obtinut o culoare distincta, si usor de tinut minte, fara a o salva, deschide lista de preset-uri si alege un preset existent. Interfata ar trebui sa fie cea mentionata pasager la punctul 7:
+	- lista de preset-uri ar trebui sa fie inlocuita cu campul de text, care ar trebui sa fie selectat, dar gol (niciun nume propus pentru salvare);
+
+	- butoanele disponibil ar trebui sa fie "Apply" si "Cancel";
+
+	- textul de sub campul de text ar trebui sa fie afisat intr-o culoare de atentionare si sa mentioneze ca incarcarea preset-ului ales va duce la pierderea combinatiei curente de setari, care nu a fost salvata.
+
+	9.1. Apasa butonul "Cancel". Combinatia curenta de setari va fi pierduta, iar preset-ul selectat va fi incarcat. Interfata rezultanta ar trebui sa fie cea de la punctele 4 (daca ai selectat un preset de utilizator) sau 5 (daca ai selectat un preset de sistem).
+
+	9.2. Reia pasul 9, doar ca, in loc sa apesi butonul "Cancel", introdu un nume valid si apasa butonul "Apply". Preset-ul selectat nu va fi incarcat. In schimb, combinatia curenta de setari va fi salvata si selectata. Preset-ul selectat anterior poate fi selectat din nou din lista, si de data aceasta va fi incarcat fara probleme.
+
+	9.3. Reia pasul 9, doar ca introdu un nume invalid: numele unui preset "de sistem" existent. Interfata ar trebui sa fie cea descrisa la punctul 8.1.
+
+	9.4. Modifica numele introdus, astfel incat sa fie numele unui preset "de utilizator" existent. Preset-ul selectat nu va fi incarcat. Combinatia curenta de setari va suprascrie preset-ul "de utilizator" existent al carui nume a fost introdus. Preset-ul selectat anterior poate fi selectat din nou din lista, si de data aceasta va fi incarcat fara probleme.
+

@@ -1,0 +1,118 @@
+PRESET MANAGER LIBRARY DOCUMENTATION
+
+Overview
+--------
+
+This library is a generic solution for managing combinations of name-value pairs. It is meant to be used in user configurable desktop AIR applications. By using this library, the end-user will be able to store and retrieve his/her preferred  configurations as "presets", and easily apply them.
+
+The library is composed of an ActionScript standalone kernel, and an MXML UI component that uses the kernel. The kernel is completely independent and agnostic of the MXML UI component and could be used with other UI, or without any UI at all.
+
+All presets are stored on disk in a sub-folder of the "application storage directory". The exact value of this directory is only known at runtime, via the `File.applicationStorageDirectory constant.` The sub-folder name will be provided as a parameter when initializing the library.
+
+The preset files will be saved under user-provided names. The file extension will also be provided as a parameter upon library initialization.
+
+
+Concepts
+--------
+
+The library introduces and makes use of the following concepts, each defined as a dedicated Actionscript class:
+
+-	Payload: an ordered collection of name-value pairs;
+
+-	Configuration: a Payload that has been given a name and stored on 
+	disk.
+
+-	PayloadAnalysisResult: dedicated data structure returned when a new
+	Payload is sent in; if that Payload was previously sent and stored
+	as a Configruation, contains information regarding that
+	Configuration.
+
+-	OperationResult: dedicated data structure returned after
+	Configuration related operations, such as storing, deleting or
+	setting (i.e., marking as "current") a Configuration.
+
+
+The ActionScript Kernel
+-----------------------
+
+The kernel provides the core abstract functionality, irrespective of any graphical user interface. It can be used to power any desired user interface and, while the built-in MXML UI component is built on top of the kernel, the kernel itself is completely agnostic of the UI component.
+
+The kernel comprises these ActionScript comprises these classes:
+
+- 	"PresetManager.as" (main class);
+
+- 	"Configuration.as" (library's representation of a stored "preset");
+
+- 	"Payload.as" (library's representation of any user combination of
+	settings that haven't been stored yet);
+
+- 	"PayloadAnalysisResult.as" (dedicated data structure for
+	encapsulating library's response to an incoming combination of
+	settings -- or "Payload", see above);
+
+-	"OperationResult.as" (dedicated data structure for encapsulating
+	library's response to an external request of performing an operation
+	against the "current" preset -- or "Configuration", see above);
+
+-	"PresetEvent.as" (custom event to be used by the MXML UI component
+	-- the kernel itself does not need events to operate, as it is
+	entirely synchronous);
+
+-	"Assertions.as" (class with static methods for validating user
+	input);
+
+-	"Constants.as" (helps circulate defaults between the kernel and the
+	MXML UI component).
+
+The functionality of the kernel revolves around six public methods, one of which is static:
+
+-	PresetManager
+	Constructor for class PresetManager.
+	@param	builtinConfigurations
+			List of Configurations that shall be considered as
+			"built-in", and, thus, not deletable. The library will cache
+			these on disk on first invocation, and ignore this
+			parameter afterwards. Use the static method:
+
+			`PresetManager.hasBuiltInCache (homeDirName : String) :
+			Boolean`
+
+			to skip processing and packaging the list of built-in
+			Configurations when they are not needed anymore. This way,
+			you will save CPU on subsequent runs of the application.
+
+	@param	fileExtension
+			The file "Type" or "extension" to use for storing Configurations on disk.
+
+	@param	homeDirName
+			Name of a folder (relative to the `ROOT_HOME_DIRECTORY`
+			location), where all the Configuration files will be stored.
+			A "cache.builtIn" sub-folder will be created here for
+			"built-in" Configurations.
+
+	The `ROOT_HOME_DIRECTORY` public constant has the value
+	`File.applicationStorageDirectory`, which makes it OS and application
+	dependant.
+
+
+-	currentConfiguration
+	Read-only accessor.
+	Returns the Configuration that was previously marked as "current"
+	via `setCurrentConfiguration()`. Returns `null` if no Configuration
+	was ever marked as "current".
+
+
+-	initialized
+	Read-only accessor.
+	Contains `true` if this class was correctly initialized. Especially
+	useful for the case where assertions were disabled.
+
+
+-	setCurrentPayload
+	Analyses given `payload` and decides whether its content is novel or has been sent for analysis before. If the later, chances are for that content to have been also stored on disk as a Configuration; if this is the case, the returned PayloadAnalysisResult instance will contain that Configuration.
+
+	@param	payload
+			The Payload to be sent-in for evaluation.
+
+
+		
