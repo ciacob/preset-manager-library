@@ -44,8 +44,21 @@
 
     <fx:Script>
 		<![CDATA[
+        import eu.claudius.iacob.desktop.presetmanager.lib.Configuration;
+        import eu.claudius.iacob.desktop.presetmanager.lib.Constants;
+        import eu.claudius.iacob.desktop.presetmanager.lib.OperationResult;
+        import eu.claudius.iacob.desktop.presetmanager.lib.Payload;
+        import eu.claudius.iacob.desktop.presetmanager.lib.PayloadAnalysisResult;
+        import eu.claudius.iacob.desktop.presetmanager.lib.PresetEvent;
+        import eu.claudius.iacob.desktop.presetmanager.lib.PresetManager;
         import eu.claudius.iacob.maidens.Colors;
         import eu.claudius.iacob.maidens.Sizes;
+        import eu.claudius.iacob.maidens.skins.ApplyButtonSkin;
+        import eu.claudius.iacob.maidens.skins.CancelButtonSkin;
+        import eu.claudius.iacob.maidens.skins.DeleteButtonSkin;
+        import eu.claudius.iacob.maidens.skins.ForceButtonSkin;
+        import eu.claudius.iacob.maidens.skins.RenameButtonSkin;
+        import eu.claudius.iacob.maidens.skins.SaveButtonSkin;
 
         import mx.collections.ArrayCollection;
         import mx.collections.ISort;
@@ -55,32 +68,17 @@
         import mx.events.FlexEvent;
         import mx.events.ListEvent;
 
-        import spark.collections.Sort;
-        import spark.collections.SortField;
-        import spark.events.TextOperationEvent;
-
-        import eu.claudius.iacob.desktop.presetmanager.lib.Configuration;
-        import eu.claudius.iacob.desktop.presetmanager.lib.Constants;
-        import eu.claudius.iacob.desktop.presetmanager.lib.OperationResult;
-        import eu.claudius.iacob.desktop.presetmanager.lib.Payload;
-        import eu.claudius.iacob.desktop.presetmanager.lib.PayloadAnalysisResult;
-        import eu.claudius.iacob.desktop.presetmanager.lib.PresetEvent;
-        import eu.claudius.iacob.desktop.presetmanager.lib.PresetManager;
-
         import ro.ciacob.desktop.operation.Procrastinator;
+        import ro.ciacob.desktop.signals.PTT;
         import ro.ciacob.utils.ColorUtils;
         import ro.ciacob.utils.Files;
         import ro.ciacob.utils.Patterns;
         import ro.ciacob.utils.Strings;
         import ro.ciacob.utils.constants.CommonStrings;
 
-        import eu.claudius.iacob.maidens.skins.SaveButtonSkin;
-        import eu.claudius.iacob.maidens.skins.RenameButtonSkin;
-        import eu.claudius.iacob.maidens.skins.DeleteButtonSkin;
-        import eu.claudius.iacob.maidens.skins.ApplyButtonSkin;
-        import eu.claudius.iacob.maidens.skins.ForceButtonSkin;
-        import eu.claudius.iacob.maidens.skins.CancelButtonSkin;
-
+        import spark.collections.Sort;
+        import spark.collections.SortField;
+        import mx.events.DropdownEvent;
 
         // ---
         // PUBLIC MEMBERS
@@ -98,7 +96,6 @@
         /**
          * List of "built-in configurations" to initialize the underlying library with. Setting
          * this property has no effect after the library has been initialized.
-         * @see PresetManager.PresetManager()
          */
         public function set builtinConfigurations(value:Vector.<Configuration>):void {
             if (!_presetManager) {
@@ -111,7 +108,6 @@
         /**
          * The file extension the underlying library will use when saving presets (aka "Configurations")
          * to disk. Setting this property has no effect after the library has been initialized.
-         * @see PresetManager.PresetManager()
          */
         public function set fileExtension(value:String):void {
             if (!_presetManager) {
@@ -124,7 +120,6 @@
         /**
          * The name of the directory the underlying library will store presets (aka "Configurations") into.
          * Setting this property has no effect after the library has been initialized.
-         * @see PresetManager.PresetManager()
          */
         public function set homeDirName(value:String):void {
             if (!_presetManager) {
@@ -239,7 +234,7 @@
          *            Object value represent the value associated to that setting.
          *
          *            Example: given a "Color Mixer" sample application, where the user
-         *            is able to drag three sliders, for Red, Green and Blue respectivelly,
+         *            is able to drag three sliders, for Red, Green and Blue respectively,
          *            in order to produce a new color, the `userSettings` parameter sent
          *            to `evaluate` could look like this:
          *
@@ -289,7 +284,7 @@
         /**
          * Queries the underlying library for the full list of available
          * presets. Does not return a value, instead populates the bindable
-         * memeber `_listInputDataProvider`, which, in turn, populates the
+         * member `_listInputDataProvider`, which, in turn, populates the
          * `presetList` DropDownList.
          */
         private function _updatePresetsList():void {
@@ -473,7 +468,7 @@
          * Useful because the underlying PresetManager library only provides access to the
          * Configuration that was last set as "current".
          *
-         * @param    uid
+         * @param    configurationName
          *            A Configuration unique ID. `Null` is an accepted value.
          *
          * @return    The matching Configuration Object, or `null` if there is no match (or if the
@@ -693,11 +688,11 @@
                     if (targetConfiguration) {
                         var result:OperationResult;
 
-                        // Case (A): we are overwritting an existing user preset (aka "Configuration") with some
+                        // Case (A): we are overwriting an existing user preset (aka "Configuration") with some
                         // novel settings (aka "Payload") that were never stored before: we delete the preset
                         // and store the settings under the now vacant name.
                         if (_analysisResult && _analysisResult.availableActions.indexOf(PayloadAnalysisResult.ACTION_SAVE) != -1) {
-                            var tmpName:String = Strings.generateUniqueId({}, Constants.CONFIG_NAME_MAX_CHARS);
+                            var tmpName:String = Strings.UUID;
                             result = _presetManager.storeCurrentPayload(tmpName);
                             if (result.success) {
                                 _analysisResult = null;
@@ -775,6 +770,25 @@
         }
 
         /**
+         * Executes when the pop-up list of presets is shown. Dispatches a `popupShown` message through the global pipe,
+         * which might be of interest to the theme manager, which need to colorize all pop-ups based on currently
+         * selected theme.
+         * @param event
+         */
+        private function _onPopupShown(event : DropdownEvent):void {
+            trace ('_onPopupShown');
+            var cb:ComboBox = (event.target as ComboBox);
+            trace ('cb:', cb);
+
+            var globalPipe:PTT = PTT.getPipe();
+
+            trace ('globalPipe:', globalPipe);
+            trace ('cb.dropdown:', cb.dropdown);
+
+            globalPipe.send('popupShown', cb.dropdown);
+        }
+
+        /**
          * Executes when the currently selected preset was changed inside the
          * `presetList` DropDownList.
          */
@@ -841,7 +855,7 @@
          * is in place to to protect against "rapid-fire" calls of the function.
          */
         private function _onInputChangeWindow():void {
-            var testOperationStatus:int = _operationStatus;
+            var testOperationStatus:int;
             var configurationName:String = Strings.trim(presetInput.text);
             if (configurationName) {
                 var existingConfiguration:Configuration = _nameToConfiguration(configurationName);
@@ -916,7 +930,9 @@
                          visible="{_listVisible}"
                          includeInLayout="{_listVisible}"
                          prompt="{(_analysisResult != null)? PROMPT_CUSTOM_PRESET : PROMPT_NO_PRESET}"
-                         change="_onPresetSelected (event)"/>
+                         change="_onPresetSelected (event)"
+                         open="_onPopupShown(event)"
+            />
 
             <!-- Input for naming and renaming presets -->
             <mx:TextInput id="presetInput"
