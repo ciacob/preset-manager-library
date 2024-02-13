@@ -776,15 +776,8 @@
          * @param event
          */
         private function _onPopupShown(event : DropdownEvent):void {
-            trace ('_onPopupShown');
             var cb:ComboBox = (event.target as ComboBox);
-            trace ('cb:', cb);
-
             var globalPipe:PTT = PTT.getPipe();
-
-            trace ('globalPipe:', globalPipe);
-            trace ('cb.dropdown:', cb.dropdown);
-
             globalPipe.send('popupShown', cb.dropdown);
         }
 
