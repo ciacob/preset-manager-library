@@ -37,7 +37,7 @@ package eu.claudius.iacob.desktop.presetmanager.lib {
 	 * - Configuration: a Payload that has been given a name and stored on disk.
 	 * 
 	 * - PayloadAnalysisResult: dedicated data structure returned when a new Payload is sent
-	 *   in; if that Payload was previously sent and stored as a Configruation, contains
+	 *   in; if that Payload was previously sent and stored as a Configuration, contains
 	 *   information regarding that Configuration.
 	 * 
 	 * - OperationResult: dedicated data structure returned after Configuration related
@@ -511,25 +511,27 @@ re		 *
 		
 		/**
 		 * Attempts to serialize and write a given Configuration to disk.
-		 * 
+		 *
 		 * @param	configuration
-		 * 			A Configuration instance to serialize and save to disk. The exact location
-		 * 			where the new file will be stored depends on the `isReadOnly` property of the
-		 * 			Configuration being saved, namely:
-		 * 
-		 * 			- user-provided Configurations will be stored in a "home directory" that is
-		 * 			  relative to the `PresetManager.ROOT_HOME_DIRECTORY` location;
-		 * 
-		 * 			- built-in (or "read-only") Configurations will be stored in a sub-folder
-		 * 			  of the aforementioned "home directory", by the name of the 
-		 * 			 `PresetManager.BUILTIN_CACHE_DIR_NAME` constant.
-		 * 
-		 * @throws	When any of the following situations occur:
-		 * 			- TODO: PROVIDE COMPLETE LIST
-		 * 
-		 * @return	Returns an OperationResult instance with information about the outcome.
-		 * 			Writing was successful if the returned OperationResult instance's `success`
-		 * 			field contains `true`.
+		 *          A Configuration instance to serialize and save to disk. The exact location
+		 *          where the new file will be stored depends on the `isReadOnly` property of the
+		 *          Configuration being saved, namely:
+		 *
+		 *          - user-provided Configurations will be stored in a "home directory" that is
+		 *            relative to the `PresetManager.ROOT_HOME_DIRECTORY` location;
+		 *
+		 *          - built-in (or "read-only") Configurations will be stored in a sub-folder
+		 *            of the aforementioned "home directory", by the name of the
+		 *           `PresetManager.BUILTIN_CACHE_DIR_NAME` constant.
+		 *
+		 * @param	force
+		 *
+		 * @throws  When any of the following situations occur:
+		 *          - TODO: PROVIDE COMPLETE LIST
+		 *
+		 * @return  Returns an OperationResult instance with information about the outcome.
+		 *          Writing was successful if the returned OperationResult instance's `success`
+		 *          field contains `true`.
 		 */
 		private function _writeConfigurationToFile (configuration : Configuration, force : Boolean = false) : OperationResult {
 			var fileName : String = Strings.sprintf (CONFIG_FILE_NAME_TEMPLATE, configuration.name, configuration.hash, _fileExtension);
